@@ -138,3 +138,232 @@ class DiffOut(BaseModel):
     new_event_cutoff_id: str | None
     student_changes: list[dict[str, Any]]
     students_affected: int
+
+
+RoleName = Literal["college", "enterprise", "third_party"]
+
+
+def _ensure_aware(v: datetime | None) -> datetime | None:
+    if v is not None and v.tzinfo is None:
+        raise ValueError("timestamps must be timezone-aware (RFC 3339)")
+    return v
+
+
+class GrantIn(BaseModel):
+    grant_id: str = Field(..., min_length=1, max_length=128)
+    role: RoleName
+    party_id: str = Field(..., min_length=1, max_length=128)
+    fields: list[str] = Field(..., min_length=1)
+    effective_from: datetime
+    effective_to: datetime | None = None
+    actor_id: str = Field(..., min_length=1, max_length=128)
+    reason: str = Field(..., min_length=1, max_length=512)
+
+    @field_validator("effective_from", "effective_to")
+    @classmethod
+    def _aware(cls, v: datetime | None) -> datetime | None:
+        return _ensure_aware(v)
+
+
+class GrantOut(BaseModel):
+    grant_id: str
+    activity_id: str
+    role: str
+    party_id: str
+    fields: list[str]
+    effective_from: str
+    effective_to: str | None
+    status: str
+    version: int
+
+
+class TransferIn(BaseModel):
+    grant_id: str = Field(..., min_length=1, max_length=128)
+    to_party_id: str = Field(..., min_length=1, max_length=128)
+    to_role: RoleName | None = None
+    new_grant_id: str = Field(..., min_length=1, max_length=128)
+    effective_at: datetime
+    expected_version: int = Field(..., ge=1)
+    actor_id: str = Field(..., min_length=1, max_length=128)
+    reason: str = Field(..., min_length=1, max_length=512)
+
+    @field_validator("effective_at")
+    @classmethod
+    def _aware(cls, v: datetime) -> datetime:
+        return _ensure_aware(v)  # type: ignore[return-value]
+
+
+class TransferOut(BaseModel):
+    closed: GrantOut
+    opened: GrantOut
+
+
+class DelegationIn(BaseModel):
+    delegation_id: str = Field(..., min_length=1, max_length=128)
+    from_party_id: str = Field(..., min_length=1, max_length=128)
+    to_party_id: str = Field(..., min_length=1, max_length=128)
+    fields: list[str] = Field(..., min_length=1)
+    effective_from: datetime
+    effective_to: datetime | None = None
+    actor_id: str = Field(..., min_length=1, max_length=128)
+    reason: str = Field(..., min_length=1, max_length=512)
+
+    @field_validator("effective_from", "effective_to")
+    @classmethod
+    def _aware(cls, v: datetime | None) -> datetime | None:
+        return _ensure_aware(v)
+
+
+class DelegationOut(BaseModel):
+    delegation_id: str
+    activity_id: str
+    from_party_id: str
+    to_party_id: str
+    fields: list[str]
+    effective_from: str
+    effective_to: str | None
+    status: str
+    version: int
+
+
+class SharedFieldsIn(BaseModel):
+    shared_fields: dict[str, list[str] | None]
+    actor_id: str = Field(..., min_length=1, max_length=128)
+    reason: str = Field(..., min_length=1, max_length=512)
+
+
+class SharedFieldsOut(BaseModel):
+    activity_id: str
+    shared_fields: dict[str, list[str]]
+    version: int
+
+
+class AuthorizeIn(BaseModel):
+    party_id: str = Field(..., min_length=1, max_length=128)
+    field: str = Field(..., min_length=1, max_length=128)
+    business_time: datetime
+
+    @field_validator("business_time")
+    @classmethod
+    def _aware(cls, v: datetime) -> datetime:
+        return _ensure_aware(v)  # type: ignore[return-value]
+
+
+class CountersignerOut(BaseModel):
+    party_id: str
+    role: str
+
+
+class AuthorizeOut(BaseModel):
+    decision: str
+    reason: str
+    via_delegation_id: str | None
+    required_countersigners: list[CountersignerOut]
+
+
+class CorrectionIn(BaseModel):
+    correction_id: str = Field(..., min_length=1, max_length=128)
+    event_id: str = Field(..., min_length=1, max_length=128)
+    field: str = Field(..., min_length=1, max_length=128)
+    old_value: str = Field("", max_length=512)
+    new_value: str = Field("", max_length=512)
+    business_time: datetime
+    party_id: str = Field(..., min_length=1, max_length=128)
+    reason: str = Field(..., min_length=1, max_length=512)
+    emergency: bool = False
+    review_window_hours: int = Field(48, gt=0, le=720)
+    requested_at: datetime | None = Field(
+        None, description="缺省取服务器当前时间；用于补录历史操作"
+    )
+
+    @field_validator("business_time", "requested_at")
+    @classmethod
+    def _aware(cls, v: datetime | None) -> datetime | None:
+        return _ensure_aware(v)
+
+
+class CountersignatureOut(BaseModel):
+    party_id: str
+    role: str
+    approve: bool
+    signed_at: str
+    reason: str
+
+
+class CorrectionOut(BaseModel):
+    correction_id: str
+    activity_id: str
+    event_id: str
+    field: str
+    old_value: str
+    new_value: str
+    business_time: str
+    requested_by: str
+    requested_at: str
+    emergency: bool
+    status: str
+    required_countersigners: list[CountersignerOut]
+    countersignatures: list[CountersignatureOut]
+    review_deadline: str | None
+    reviewed_by: str | None
+    reviewed_at: str | None
+    review_outcome: str | None
+    review_overdue: bool
+    version: int
+
+
+class CountersignIn(BaseModel):
+    party_id: str = Field(..., min_length=1, max_length=128)
+    approve: bool
+    reason: str = Field(..., min_length=1, max_length=512)
+
+
+class ReviewIn(BaseModel):
+    party_id: str = Field(..., min_length=1, max_length=128)
+    outcome: Literal["confirm", "revert"]
+    reason: str = Field(..., min_length=1, max_length=512)
+    reviewed_at: datetime | None = Field(
+        None, description="缺省取服务器当前时间；用于补录历史操作"
+    )
+
+    @field_validator("reviewed_at")
+    @classmethod
+    def _aware(cls, v: datetime | None) -> datetime | None:
+        return _ensure_aware(v)
+
+
+class ChainRoleOut(BaseModel):
+    role: str
+    party_id: str
+    grant_id: str
+    fields: list[str]
+    effective_from: str
+    effective_to: str | None
+    status: str
+
+
+class ChainOut(BaseModel):
+    activity_id: str
+    at: str
+    roles: list[ChainRoleOut]
+    delegations: list[DelegationOut]
+    shared_fields: dict[str, list[str]]
+
+
+class AuditEntryOut(BaseModel):
+    aggregate_type: str
+    aggregate_id: str
+    sequence: int
+    action: str
+    actor_id: str
+    occurred_at: str
+    before: str
+    after: str
+    reason: str
+    fingerprint: str
+
+
+class AuditTrailOut(BaseModel):
+    activity_id: str
+    total: int
+    entries: list[AuditEntryOut]
