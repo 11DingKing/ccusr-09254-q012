@@ -138,3 +138,82 @@ class DiffOut(BaseModel):
     new_event_cutoff_id: str | None
     student_changes: list[dict[str, Any]]
     students_affected: int
+
+
+class AssignmentIn(BaseModel):
+    actor_id: str = Field(..., min_length=1, max_length=128)
+    valid_from: datetime
+    note: str = Field("", max_length=512)
+
+    @field_validator("valid_from")
+    @classmethod
+    def _ensure_aware(cls, v: datetime) -> datetime:
+        if v.tzinfo is None:
+            raise ValueError("timestamps must be timezone-aware (RFC 3339)")
+        return v
+
+
+class FieldScopeIn(BaseModel):
+    roles: list[str] = Field(..., min_length=1)
+    valid_from: datetime
+
+    @field_validator("valid_from")
+    @classmethod
+    def _ensure_aware(cls, v: datetime) -> datetime:
+        if v.tzinfo is None:
+            raise ValueError("timestamps must be timezone-aware (RFC 3339)")
+        return v
+
+
+class DelegationIn(BaseModel):
+    delegator_actor_id: str = Field(..., min_length=1, max_length=128)
+    delegatee_actor_id: str = Field(..., min_length=1, max_length=128)
+    valid_from: datetime
+    valid_until: datetime | None = None
+    reason: str = Field("", max_length=512)
+
+    @model_validator(mode="after")
+    def _check_window(self) -> "DelegationIn":
+        if self.valid_until is not None and self.valid_until <= self.valid_from:
+            raise ValueError("valid_until must be after valid_from")
+        return self
+
+    @field_validator("valid_from", "valid_until")
+    @classmethod
+    def _ensure_aware(cls, v: datetime | None) -> datetime | None:
+        if v is not None and v.tzinfo is None:
+            raise ValueError("timestamps must be timezone-aware (RFC 3339)")
+        return v
+
+
+class CorrectionIn(BaseModel):
+    correction_id: str = Field(..., min_length=1, max_length=128)
+    actor_id: str = Field(..., min_length=1, max_length=128)
+    field_name: str = Field(..., min_length=1, max_length=128)
+    event_ref: str = Field(..., min_length=1, max_length=128)
+    event_occurred_at: datetime
+    old_value: str = Field(..., min_length=1)
+    new_value: str = Field(..., min_length=1)
+    reason: str = Field(..., min_length=1)
+    is_emergency: bool = False
+    review_seconds: int = Field(24 * 60 * 60, gt=0)
+
+    @field_validator("event_occurred_at")
+    @classmethod
+    def _ensure_aware(cls, v: datetime) -> datetime:
+        if v.tzinfo is None:
+            raise ValueError("timestamps must be timezone-aware (RFC 3339)")
+        return v
+
+
+class CountersignIn(BaseModel):
+    actor_id: str = Field(..., min_length=1, max_length=128)
+    note: str = Field("", max_length=512)
+    at: datetime | None = None
+
+    @field_validator("at")
+    @classmethod
+    def _ensure_aware(cls, v: datetime | None) -> datetime | None:
+        if v is not None and v.tzinfo is None:
+            raise ValueError("timestamps must be timezone-aware (RFC 3339)")
+        return v
